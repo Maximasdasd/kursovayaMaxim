@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/app/bootstrap.php';
-$urls = ['/', '/catalog/'];
+$urls = ['/', '/catalog/', '/about/', '/contacts/'];
 foreach (rows('SELECT slug FROM categories ORDER BY id') as $category) {
     $urls[] = '/catalog/' . $category['slug'] . '/';
 }

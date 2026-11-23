@@ -15,7 +15,7 @@
                 <i></i><?= esc($v['category_name']) ?>
             </div>
             <h1><?= esc( $v['name'] ) ?></h1>
-            <p class="sku mono"><?= esc($v['sku']) ?> · <?= esc($v['format_name']) ?></p>
+            <p class="sku mono">Артикул <?= esc($v['sku']) ?> · <?= esc($v['format_name']) ?></p>
             <p><?= esc( $v['description'] ) ?></p>
             <h2 class="label-title">Вариант</h2>
             <div class="tabs">
@@ -46,11 +46,13 @@
                 <?= formStart('add', 'buy-form') ?>
                     <input type="hidden" name="id" value="<?= $v[ 'id' ] ?>">
                     <label>Количество
-                        <input id="buy-qty" type="number" name="qty" min="1" max="<?= max( 1, $v['stock'] ) ?>" value="1"
+                        <input id="buy-qty" data-price="<?= (int) $v['price'] ?>" type="number" name="qty" min="1" max="<?= max( 1, $v['stock'] ) ?>" value="1"
                             required>
                     </label>
                     <button class="btn lime" <?= $v['stock'] ? '' : 'disabled' ?>>В корзину <?= icon( 'bag' ) ?></button>
                 </form>
+                <p class="purchase-total">Сумма за выбранное количество <strong id="product-total"><?= money($v['price']) ?></strong></p>
+                <p id="purchase-status" role="status" aria-live="polite"></p>
             </div>
             <p class="pickup">Самовывоз · Оплата при получении</p>
         </div>

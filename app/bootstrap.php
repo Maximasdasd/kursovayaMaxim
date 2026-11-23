@@ -81,12 +81,13 @@ function one(string $sql, array $args = []): ?array
 {
     return run($sql, $args)->fetch() ?: null;
 }
-function esc(mixed $s): string
+function esc($s): string
 {
     return htmlspecialchars((string) $s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
-function money(int $c): string
+function money($value): string
 {
+    $c = (int) $value;
     return number_format($c / 100, $c % 100 ? 2 : 0, ',', ' ') . ' ₽';
 }
 function titleOf(array $v): string
@@ -99,6 +100,9 @@ function itemPath(array $v): string
 }
 function imagePath(string $key): string
 {
+    if (preg_match('/^upload-[a-f0-9]{32}\.(jpg|png|webp)$/D', $key)) {
+        return '/assets/images/' . rawurlencode($key);
+    }
     return '/assets/images/' . rawurlencode($key) . '.webp';
 }
 function imageUrl(string $key): string
@@ -130,13 +134,23 @@ function cartLines(): array
 }
 function total(array $lines): int
 {
-    return array_sum(array_map(fn($v) => $v['qty'] * $v['price'], $lines));
+    return array_sum(array_map(function ($v) { return $v['qty'] * $v['price']; }, $lines));
 }
 function user(): ?array
 {
-    return isset($_SESSION['uid']) ? one('SELECT id,name,email,role FROM users WHERE id=?', [$_SESSION['uid']]) : null;
+    if (!isset($_SESSION['uid'])) {
+        return null;
+    }
+    $u = one('SELECT id,name,email,role,password_hash FROM users WHERE id=?', [$_SESSION['uid']]);
+    if (!$u || (isset($_SESSION['auth_stamp']) && !hash_equals($_SESSION['auth_stamp'], hash('sha256', $u['password_hash'])))) {
+        unset($_SESSION['uid'], $_SESSION['auth_stamp']);
+        return null;
+    }
+    $_SESSION['auth_stamp'] = hash('sha256', $u['password_hash']);
+    unset($u['password_hash']);
+    return $u;
 }
-function go(string $url): never
+function go(string $url): void
 {
     header('Location: ' . siteUrl($url), true, 303);
     exit();
@@ -145,13 +159,13 @@ function tokenField(): string
 {
     return '<input type="hidden" name="csrf" value="' . esc($_SESSION['csrf']) . '">';
 }
-function formStart(string $action, string $class = ''): string
+function formStart(string $action, string $class = '', bool $upload = false): string
 {
     return '<form class="' .
         esc($class) .
         '" method="post" action="' .
         esc(siteUrl('/api.php')) .
-        '">' .
+        '"' . ($upload ? ' enctype="multipart/form-data"' : '') . '>' .
         tokenField() .
         '<input type="hidden" name="action" value="' .
         esc($action) .
@@ -192,14 +206,11 @@ function beginSession(): void
 {
     session_save_path(ROOT . '/data/sessions');
     session_name('sloy_store');
-    session_set_cookie_params([
-        'path' => siteUrl('/'),
-        'httponly' => true,
-        'samesite' => 'Lax',
-        'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'
-    ]);
+    session_set_cookie_params(0, siteUrl('/') . '; SameSite=Lax', '', ($_SERVER['HTTPS'] ?? '') === 'on', true);
     session_start();
-    $_SESSION['csrf'] ??= bin2hex(random_bytes(24));
+    if (!isset($_SESSION['csrf'])) {
+        $_SESSION['csrf'] = bin2hex(random_bytes(24));
+    }
 }
 function catalog(array $category = null): array
 {
@@ -219,7 +230,7 @@ function catalog(array $category = null): array
         if (!is_array($values)) {
             $values = [$values];
         }
-        $values = array_values(array_unique(array_filter($values, fn($v) => is_string($v) && $v !== '')));
+        $values = array_values(array_unique(array_filter($values, function ($v) { return is_string($v) && $v !== ''; })));
         if ($values) {
             $conditions[] = "v.$col IN (" . implode(',', array_fill(0, count($values), '?')) . ')';
             array_push($args, ...$values);
@@ -229,11 +240,9 @@ function catalog(array $category = null): array
         $conditions[] = 'v.stock>0';
     }
     $sort = $_GET['sort'] ?? '';
-    $order = match ($sort) {
-        'low' => 'v.price ASC, v.id',
-        'high' => 'v.price DESC, v.id',
-        default => 'p.id, v.id'
-    };
+    $sort = is_string($sort) ? $sort : '';
+    $orders = ['low' => 'v.price ASC, v.id', 'high' => 'v.price DESC, v.id'];
+    $order = $orders[$sort] ?? 'p.id, v.id';
     $where = ' WHERE ' . implode(' AND ', $conditions);
     $count = (int) run('SELECT COUNT(*)' . VARIANT_TABLES . $where, $args)->fetchColumn();
     $perPage = 6;
@@ -246,3 +255,5 @@ function catalog(array $category = null): array
     }
     return ['items' => $items, 'pages' => $pages, 'page' => $page, 'count' => $count, 'q' => $q, 'sort' => $sort];
 }
+
+require_once __DIR__ . '/features.php';

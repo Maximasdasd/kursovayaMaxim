@@ -6,9 +6,9 @@ if (PHP_SAPI !== 'cli-server') {
 }
 $path = rawurldecode((string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 if (
-    str_contains($path, '..') ||
-    str_contains($path, '\\') ||
-    str_contains($path, "\0") ||
+    (strpos($path, '..') !== false) ||
+    (strpos($path, '\\') !== false) ||
+    (strpos($path, "\0") !== false) ||
     preg_match('#^/(app|views|data|database|bin|tests|docs)(/|$)|(^|/)\.#i', $path)
 ) {
     http_response_code(403);
@@ -31,7 +31,7 @@ if ($path === '/api.php') {
     require __DIR__ . '/api.php';
     return true;
 }
-if (preg_match('#^/assets/[a-zA-Z0-9/_-]+\.(css|js|svg|webp|png)$#D', $path) && is_file(__DIR__ . $path)) {
+if (preg_match('#^/assets/[a-zA-Z0-9/_-]+\.(css|js|svg|webp|png|jpg)$#D', $path) && is_file(__DIR__ . $path)) {
     return false;
 }
 require __DIR__ . '/index.php';

@@ -18,26 +18,28 @@ $visual = [
         '25 кг'
     ]
 ];
-$first = $categories[0];
+$first = $categories[0] ?? ['name' => 'Материалы', 'slug' => ''];
+$hero = $visual[$first['slug']] ?? ['hero', 'Строительные материалы', 'Крупный план слоистого торца фанеры', 'Выбрать материалы', 'Подбор материалов', 'Для вашего проекта'];
+$heroPath = $first['slug'] !== '' ? '/catalog/' . $first['slug'] . '/' : '/catalog/';
 ?>
 <section class="hero-wrap">
     <div class="shell">
         <div class="hero" id="hero">
             <div class="hero-art">
-                <img id="hero-image" src="<?= esc( siteUrl('/assets/images/hero.webp') ) ?>" fetchpriority="high" width="1062" height="458"
-                    alt="Крупный план слоистого торца фанеры">
+                <img id="hero-image" src="<?= esc( imageUrl($hero[0]) ) ?>" fetchpriority="high" width="1062" height="458"
+                    alt="<?= esc($hero[0] === 'hero' ? 'Крупный план слоистого торца фанеры' : $hero[2]) ?>">
             </div>
             <div class="hero-copy">
                 <div class="eyebrow">
                     <i></i>
-                    <span id="hero-kind">Листовые материалы</span>
+                    <span id="hero-kind"><?= esc($hero[1]) ?></span>
                 </div>
-                <h1 id="hero-title"><?= esc( $first['name'] ) ?></h1>
-                <a id="hero-cta" class="btn lime" href="<?= esc(siteUrl('/catalog/fanera/')) ?>">Выбрать фанеру <?= icon( 'ne' ) ?></a>
+                <h1 id="hero-title"><?= esc($first['name']) ?></h1>
+                <a id="hero-cta" class="btn lime" href="<?= esc(siteUrl($heroPath)) ?>"><?= esc($hero[3]) ?> <?= icon( 'ne' ) ?></a>
             </div>
             <div class="hero-caption">
-                <span id="hero-measure"><?= esc($visual['fanera'][4]) ?></span>
-                <b id="hero-value"><?= esc( $visual['fanera'][5] ) ?></b>
+                <span id="hero-measure"><?= esc($hero[4]) ?></span>
+                <b id="hero-value"><?= esc( $hero[5] ) ?></b>
             </div>
         </div>
         <div class="hero-strip">

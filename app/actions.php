@@ -25,9 +25,11 @@ function checkout(string $name, string $phone, string $token): string
     sort($ids, SORT_NUMERIC);
     db()->beginTransaction();
     try {
+        $sqlite = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+        if ($sqlite) db()->exec('UPDATE variants SET stock=stock WHERE 0');
         $locked = [];
         foreach ($ids as $id) {
-            $v = one(selectVariants() . ' WHERE v.id=? FOR UPDATE', [$id]);
+            $v = one(selectVariants() . ' WHERE v.id=?' . ($sqlite ? '' : ' FOR UPDATE'), [$id]);
             $qty = $_SESSION['cart'][$id];
             if (!$v || !$v['visible'] || $v['stock'] < $qty) {
                 throw new DomainException('Недостаточно материала. Измените количество в корзине.');
@@ -73,7 +75,7 @@ function checkout(string $name, string $phone, string $token): string
         throw $e;
     }
 }
-function handleAction(): never
+function handleAction(): void
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         header('Allow: POST');
@@ -94,6 +96,7 @@ function handleAction(): never
                 $id = positive($_POST['id'] ?? 0, PHP_INT_MAX);
                 if ($action === 'remove') {
                     unset($_SESSION['cart'][$id]);
+                    if (ajaxCart()) cartResponse();
                     go('/cart/');
                 }
                 $v = variant($id);
@@ -108,6 +111,7 @@ function handleAction(): never
                     throw new DomainException('Доступно ' . $v['stock'] . ' ед. Проверьте количество в корзине.');
                 }
                 $_SESSION['cart'][$id] = $qty;
+                if (ajaxCart()) cartResponse();
                 go('/cart/');
             case 'checkout':
                 $back = '/checkout/';
@@ -160,16 +164,32 @@ function handleAction(): never
                 }
                 session_regenerate_id(true);
                 $_SESSION['uid'] = $u['id'];
+                $_SESSION['auth_stamp'] = hash('sha256', $u['password_hash']);
                 $_SESSION['csrf'] = bin2hex(random_bytes(24));
                 unset($_SESSION['old']);
                 go($u['role'] === 'admin' ? '/admin/' : '/account/orders/');
+            case 'profile':
+            case 'password':
+                $back = '/account/profile/';
+                editAccount($action);
+                break;
+            case 'delete_category':
+                requireAdmin();
+                $back = '/admin/?tab=categories';
+                deleteCategory(positive($_POST['id'] ?? 0, PHP_INT_MAX), (int) ($_POST['target_id'] ?? 0));
+                $_SESSION['success'] = 'Категория удалена.';
+                go($back);
             case 'logout':
                 $_SESSION = [];
                 session_regenerate_id(true);
                 go('/');
             case 'status':
                 requireAdmin();
-                $back = '/admin/';
+                $return = [];
+                foreach (['q', 'status', 'from_date', 'to_date', 'page'] as $key) {
+                    if (is_string($_POST[$key] ?? null)) $return[$key] = $_POST[$key];
+                }
+                $back = '/admin/?' . http_build_query($return);
                 $id = positive($_POST['id'] ?? 0, PHP_INT_MAX);
                 $next = ['Новый' => 'Готов к выдаче', 'Готов к выдаче' => 'Выдан'];
                 $from = (string) ($_POST['from'] ?? '');
@@ -179,7 +199,7 @@ function handleAction(): never
                 ) {
                     throw new DomainException('Статус уже изменился. Обновите список.');
                 }
-                go('/admin/');
+                go($back);
             case 'category':
                 requireAdmin();
                 $back = '/admin/?tab=categories';
@@ -237,7 +257,7 @@ function handleAction(): never
                     $stock === false ||
                     $stock < 0 ||
                     $stock > 999999 ||
-                    !in_array($image, IMAGES, true) ||
+                    !validImage($image) ||
                     !one('SELECT id FROM products WHERE id=?', [$product])
                 ) {
                     throw new DomainException('Проверьте цену, остаток, серию и изображение.');
@@ -251,13 +271,21 @@ function handleAction(): never
                 if (!preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug)) {
                     throw new DomainException('Адрес должен состоять из латинских букв, цифр и дефисов.');
                 }
+                if ($id && !one('SELECT id FROM variants WHERE id=?', [$id])) {
+                    throw new DomainException('Товар уже удалён. Обновите список.');
+                }
+                $option = stringField('option_name', 80);
+                $format = stringField('format_name', 80);
+                $unit = stringField('unit', 32);
+                $newImage = uploadedImage();
+                if ($newImage !== null) $image = $newImage;
                 $vals = [
                     $product,
                     $sku,
                     $slug,
-                    stringField('option_name', 80),
-                    stringField('format_name', 80),
-                    stringField('unit', 32),
+                    $option,
+                    $format,
+                    $unit,
                     $area === '' ? null : $area,
                     (int) round((float) $price * 100),
                     $stock,
@@ -277,7 +305,8 @@ function handleAction(): never
                             $vals
                         );
                     }
-                } catch (PDOException $e) {
+                } catch (Throwable $e) {
+                    if ($newImage !== null) unlink(ROOT . '/assets/images/' . $newImage); 
                     if ($e->getCode() === '23000') {
                         throw new DomainException('Артикул и адрес должны быть уникальными.');
                     }
@@ -289,6 +318,7 @@ function handleAction(): never
                 exit('Неизвестное действие.');
         }
     } catch (DomainException $e) {
+        if (ajaxCart()) cartResponse(422, $e->getMessage());
         $_SESSION['error'] = $e->getMessage();
         go($back);
     }

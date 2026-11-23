@@ -2,6 +2,7 @@
 <section class="shell basic">
     <div class="section-line">
         <h1>Управление магазином</h1>
+        <a class="textlink" href="<?= esc(siteUrl('/account/profile/')) ?>">Учётная запись</a>
         <?= formStart( 'logout' ) ?>
             <button class="textlink">Выйти</button>
         </form>
@@ -23,8 +24,25 @@
         </label>
         <button class="btn">Сохранить категорию</button>
     </form>
+    <?= formStart('delete_category', 'category-delete') ?>
+        <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+        <?php $productCount = (int) run('SELECT COUNT(*) FROM products WHERE category_id=?', [$c['id']])->fetchColumn(); ?>
+        <?php if ($productCount): ?>
+            <label>Перенести товары перед удалением
+                <select name="target_id" required>
+                    <option value="">Выберите категорию</option>
+                    <?php foreach ($categories as $target): ?>
+                        <?php if ((int) $target['id'] !== (int) $c['id']): ?>
+                            <option value="<?= (int) $target['id'] ?>"><?= esc($target['name']) ?></option>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+        <?php endif; ?>
+        <button class="textlink danger" data-confirm="Удалить категорию? Её товары будут перенесены в выбранную категорию.">Удалить категорию</button>
+    </form>
     <?php endforeach; ?>
-    <?= formStart( 'category', 'editor' ) ?>
+    <?= formStart('category', 'editor') ?>
         <h2>Новая категория</h2>
         <label>Название
             <input name="name" required>
@@ -85,7 +103,7 @@
     <?php foreach ( $vs as $v ): ?>
     <details class="editor">
         <summary><?= esc( $v['id'] ? $v['name'] . ' · ' . $v['option_name'] . ' · ' . $v['sku'] : 'Добавить вариант' ) ?><?= $v['id'] && !$v['visible'] ? '(скрыт)' : '' ?></summary>
-        <?= formStart('variant', 'edit-fields') ?>
+        <?= formStart('variant', 'edit-fields', true) ?>
             <input type="hidden" name="id" value="<?= (int) $v[ 'id' ] ?>">
             <label>Серия<select name="product_id">
                     <?php foreach ($products as $p): ?>
@@ -114,10 +132,17 @@
             </label>
             <?php endforeach; ?>
             <label>Изображение<select name="image">
-                    <?php foreach (IMAGES as $im): ?>
-                    <option value="<?= $im ?>" <?= $im === $v['image'] ? 'selected' : '' ?>><?= $im ?></option>
+                    <?php foreach (array_unique(array_merge(IMAGES, $v['image'] ? [$v['image']] : [])) as $im): ?>
+                    <option value="<?= esc($im) ?>" <?= $im === $v['image'] ? 'selected' : '' ?>><?= $im ?></option>
                     <?php endforeach; ?>
                 </select>
+            </label>
+            <?php if ($v['image']): ?>
+                <img class="admin-image" src="<?= esc(imageUrl($v['image'])) ?>" alt="Текущее изображение товара" width="160" height="120" loading="lazy">
+            <?php endif; ?>
+            <label>Загрузить новое изображение
+                <input name="image_file" type="file" accept="image/jpeg,image/png,image/webp">
+                <small>JPG, PNG или WebP, до 2 МБ. Загруженный файл заменит выбранное изображение этого варианта.</small>
             </label>
             <label class="check">
                 <input name="visible" type="checkbox" <?= !$v[ 'id' ] || $v['visible'] ? 'checked' : '' ?>>На витрине
@@ -125,47 +150,57 @@
             <button class="btn">Сохранить вариант</button>
         </form>
     </details>
-    <?php
-        endforeach;
-        else:
-        
-            $q = is_string($_GET['number'] ?? null) ? trim($_GET['number']) : '';
-            $orders = rows('SELECT * FROM orders ' . ($q ? 'WHERE number=? ' : '') . 'ORDER BY id DESC', $q ? [$q] : []);
-    ?>
-    <form class="adminsearch" action="<?= esc( siteUrl('/admin/') ) ?>">
-        <label>Номер заказа
-            <input name="number" placeholder="SL-…" value="<?= esc( $q ) ?>">
-        </label>
-        <button class="btn">Найти</button>
-    </form>
-
-    <?php if (!$orders): ?>
-    <p>Заказы не найдены.</p>
-    <?php
-        endif;
-        foreach ($orders as $o):
-    ?>
-    <div class="editor">
-        <div class="section-line">
-            <a href="<?= esc( siteUrl('/order/' . $o['number'] . '/') ) ?>">
-                <strong><?= esc($o['number']) ?> ↗</strong>
-            </a>
-            <b><?= money($o['total']) ?></b>
-        </div>
-        <p><?= esc( $o['created_at'] . ' · ' . $o['name'] . ' · ' . $o['phone'] ) ?></p>
-        <strong><?= esc($o['status']) ?></strong>
-
-        <?php if ($o['status'] !== 'Выдан'): ?>
-        <?= formStart('status', 'inline-form') ?>
-            <input name="id" type="hidden" value="<?= $o[ 'id' ] ?>">
-            <input name="from" type="hidden" value="<?= esc($o['status']) ?>">
-            <button><?= $o['status'] === 'Новый' ? 'Готов к выдаче' : 'Отметить выданным' ?></button>
+    <?php endforeach; ?>
+    <?php else: ?>
+        <?php $listing = orderListing(); $query = $listing['query']; ?>
+        <form class="orders-filters" action="<?= esc(siteUrl('/admin/')) ?>" method="get">
+            <input type="hidden" name="tab" value="orders">
+            <label>Поиск по номеру, имени или телефону
+                <input name="q" type="search" value="<?= esc($query['q']) ?>" placeholder="SL-…, имя или телефон">
+            </label>
+            <label>Статус
+                <select name="status">
+                    <option value="">Все статусы</option>
+                    <?php foreach (['Новый', 'Готов к выдаче', 'Выдан'] as $status): ?>
+                        <option value="<?= esc($status) ?>" <?= $query['status'] === $status ? 'selected' : '' ?>><?= esc($status) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>Дата от<input name="from_date" type="date" value="<?= esc($query['from_date']) ?>"></label>
+            <label>Дата до<input name="to_date" type="date" value="<?= esc($query['to_date']) ?>"></label>
+            <button class="btn">Найти</button>
+            <a class="textlink" href="<?= esc(siteUrl('/admin/')) ?>">Сбросить</a>
         </form>
+        <p class="resultcount">Найдено заказов: <?= $listing['count'] ?> · Страница <?= $listing['page'] ?> из <?= $listing['pages'] ?></p>
+        <?php if (!$listing['items']): ?><div class="empty"><h2>Заказы не найдены</h2><p>Измените условия поиска.</p></div><?php endif; ?>
+        <?php foreach ($listing['items'] as $o): ?>
+            <div class="editor">
+                <div class="section-line">
+                    <a href="<?= esc(siteUrl('/order/' . $o['number'] . '/')) ?>"><strong><?= esc($o['number']) ?> ↗</strong></a>
+                    <b><?= money($o['total']) ?></b>
+                </div>
+                <p><?= esc($o['created_at'] . ' · ' . $o['name'] . ' · ' . $o['phone']) ?></p>
+                <strong><?= esc($o['status']) ?></strong>
+                <?php if ($o['status'] !== 'Выдан'): ?>
+                    <?= formStart('status', 'inline-form') ?>
+                        <input name="id" type="hidden" value="<?= (int) $o['id'] ?>">
+                        <input name="from" type="hidden" value="<?= esc($o['status']) ?>">
+                        <?php foreach (array_merge($query, ['page' => $listing['page']]) as $key => $value): ?>
+                            <input type="hidden" name="<?= esc($key) ?>" value="<?= esc($value) ?>">
+                        <?php endforeach; ?>
+                        <button><?= $o['status'] === 'Новый' ? 'Готов к выдаче' : 'Отметить выданным' ?></button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+        <?php if ($listing['pages'] > 1): ?>
+            <nav class="pagination" aria-label="Страницы заказов">
+                <?php if ($listing['page'] > 1): ?><a href="<?= esc(pageLink('/admin/', array_merge($query, ['page' => $listing['page'] - 1]))) ?>">Назад</a><?php endif; ?>
+                <?php for ($page = max(1, $listing['page'] - 2); $page <= min($listing['pages'], $listing['page'] + 2); $page++): ?>
+                    <a href="<?= esc(pageLink('/admin/', array_merge($query, ['page' => $page]))) ?>" <?= $page === $listing['page'] ? 'aria-current="page"' : '' ?>><?= $page ?></a>
+                <?php endfor; ?>
+                <?php if ($listing['page'] < $listing['pages']): ?><a href="<?= esc(pageLink('/admin/', array_merge($query, ['page' => $listing['page'] + 1]))) ?>">Далее</a><?php endif; ?>
+            </nav>
         <?php endif; ?>
-    </div>
-    <?php
-        endforeach;
-        
-        endif;
-    ?>
+    <?php endif; ?>
 </section>

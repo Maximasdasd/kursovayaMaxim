@@ -2,7 +2,7 @@
 $old = $_SESSION['old'] ?? [];
 unset($_SESSION['old']);
 ?>
-<section class="shell basic">
+<section class="shell basic" id="cart-page">
 
     <?php
         if ($type === 'cart' || $type === 'checkout'):
@@ -20,27 +20,32 @@ unset($_SESSION['old']);
     </div>
 
     <?php else: ?>
-    <div class="order-layout">
+    <p id="cart-status" role="status" aria-live="polite"></p>
+    <div id="cart-empty" class="empty" hidden>
+        <h2>Ваша корзина пуста</h2>
+        <a class="btn" href="<?= esc(siteUrl('/catalog/')) ?>">В каталог</a>
+    </div>
+    <div class="order-layout" id="cart-content">
         <div>
 
             <?php foreach ($lines as $line): ?>
-            <div class="cart-row">
+            <div class="cart-row" data-cart-id="<?= (int) $line['id'] ?>" data-price="<?= (int) $line['price'] ?>">
                 <img width="120" height="100" src="<?= esc( imageUrl($line['image']) ) ?>" alt="">
                 <div>
                     <a href="<?= esc(siteUrl(itemPath($line))) ?>">
                         <strong><?= esc(titleOf($line)) ?></strong>
                     </a>
-                    <small><?= esc($line['sku'] . ' · ' . $line['format_name']) ?></small>
+                    <small>Артикул <?= esc($line['sku'] . ' · ' . $line['format_name']) ?></small>
                     <p><?= money($line['price']) ?> / <?= esc( $line['unit'] ) ?></p>
 
                     <?php if (!$ordering): ?>
-                    <?= formStart('set', 'inline-form') ?>
+                    <?= formStart('set', 'inline-form cart-quantity') ?>
                         <input type="hidden" name="id" value="<?= $line[ 'id' ] ?>">
                         <input name="qty" type="number" min="1" max="9999" value="<?= $line['qty'] ?>"
                             aria-label="Количество <?= esc( $line['sku'] ) ?>" required>
                         <button>Обновить</button>
                     </form>
-                    <?= formStart('remove', 'inline-form') ?>
+                    <?= formStart('remove', 'inline-form cart-remove') ?>
                         <input type="hidden" name="id" value="<?= $line[ 'id' ] ?>">
                         <button>Удалить</button>
                     </form>
@@ -52,7 +57,7 @@ unset($_SESSION['old']);
                     <p class="error">Доступно: <?= $line['visible'] ? $line['stock'] : 0 ?>. Исправьте корзину.</p>
                     <?php endif; ?>
                 </div>
-                <b><?= money( $line['price'] * $line['qty'] ) ?></b>
+                <b data-line-total><?= money($line['price'] * $line['qty']) ?></b>
             </div>
             <?php endforeach; ?>
 
@@ -64,12 +69,12 @@ unset($_SESSION['old']);
             <h2>Ваш заказ</h2>
             <div class="total">
                 <span>Итого</span>
-                <strong><?= money( total($lines) ) ?></strong>
+                <strong data-cart-total><?= money(total($lines)) ?></strong>
             </div>
             <p>Самовывоз · Оплата при получении</p>
 
             <?php if (!$ordering): ?>
-            <a class="btn" href="<?= esc(siteUrl('/checkout/')) ?>">Оформить заказ <?= icon( 'arrow' ) ?></a>
+            <a class="btn" id="cart-checkout" href="<?= esc(siteUrl('/checkout/')) ?>">Оформить заказ <?= icon( 'arrow' ) ?></a>
             <?php
                 else:
                 $qt = bin2hex(random_bytes(24));
@@ -103,7 +108,7 @@ unset($_SESSION['old']);
         <div>
             <span>
                 <strong><?= esc($line['name']) ?></strong>
-                <small><?= esc($line['sku']) ?> · <?= $line[ 'quantity' ] ?> × <?= money($line['price']) ?> / <?= esc($line['unit']) ?></small>
+                <small>Артикул <?= esc($line['sku']) ?> · <?= $line[ 'quantity' ] ?> × <?= money($line['price']) ?> / <?= esc($line['unit']) ?></small>
             </span>
             <b><?= money( $line['quantity'] * $line['price'] ) ?></b>
         </div>

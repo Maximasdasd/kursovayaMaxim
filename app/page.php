@@ -2,7 +2,7 @@
 declare(strict_types=1);
 $requestPath = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/');
 $prefix = basePath();
-$path = str_starts_with($requestPath, $prefix . '/') ? substr($requestPath, strlen($prefix)) : $requestPath;
+$path = strpos($requestPath, $prefix . '/') === 0 ? substr($requestPath, strlen($prefix)) : $requestPath;
 if ($path !== '/' && substr($path, -1) !== '/' && preg_match('~^/[a-z0-9/-]+$~D', $path)) {
     header(
         'Location: ' .
@@ -28,6 +28,11 @@ if ($path === '/') {
     $title = 'Слой — магазин строительных материалов';
     $desc =
         'Фанера, керамическая плитка и плиточный клей. Выберите размер, рассчитайте количество упаковок и оформите заказ на самовывоз.';
+} elseif (in_array($path, ['/about/', '/contacts/'], true)) {
+    $type = trim($path, '/');
+    $title = ($type === 'about' ? 'О компании' : 'Контакты') . ' — Слой';
+    $desc = $type === 'about' ? 'Магазин стройматериалов Слой. Фанера, плитка, клей и подбор материалов для ремонта.' : 'Контакты магазина Слой, адрес самовывоза и часы работы.';
+    $crumbs = [[$type === 'about' ? 'О компании' : 'Контакты', $path]];
 } elseif ($path === '/catalog/' || preg_match('~^/catalog/([a-z0-9-]+)/$~D', $path, $m)) {
     $category = $path === '/catalog/' ? null : one('SELECT * FROM categories WHERE slug=?', [$m[1]]);
     if ($category || $path === '/catalog/') {
@@ -38,10 +43,10 @@ if ($path === '/') {
             $desc =
                 $category['description'] ??
                 'Фанера, плитка и сухие смеси. Поиск по артикулу, выбор толщины, формата и фасовки.';
-            $params = array_filter($_GET, fn($value) => $value !== '' && $value !== []);
+            $params = array_filter($_GET, function ($value) { return $value !== '' && $value !== []; });
             unset($params['page']);
             foreach (array_keys($params) as $key) {
-                if (str_starts_with((string) $key, 'utm_')) {
+                if (strpos((string) $key, 'utm_') === 0) {
                     unset($params[$key]);
                 }
             }
@@ -97,7 +102,7 @@ if ($path === '/') {
             ]
         ];
     }
-} elseif (in_array($path, ['/cart/', '/checkout/', '/login/', '/register/', '/account/orders/', '/admin/'], true)) {
+} elseif (in_array($path, ['/cart/', '/checkout/', '/login/', '/register/', '/account/orders/', '/account/profile/', '/admin/'], true)) {
     $private = true;
     $type = trim($path, '/');
     $title = [
@@ -106,9 +111,10 @@ if ($path === '/') {
         'login' => 'Вход',
         'register' => 'Регистрация',
         'account/orders' => 'Мои заказы',
+        'account/profile' => 'Учётная запись',
         'admin' => 'Управление магазином'
     ][$type];
-    if (in_array($type, ['admin', 'account/orders'], true) && !$me) {
+    if (in_array($type, ['admin', 'account/orders', 'account/profile'], true) && !$me) {
         go('/login/');
     }
     if ($type === 'admin' && $me['role'] !== 'admin') {

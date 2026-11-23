@@ -31,7 +31,37 @@ unset($_SESSION['old']);
         <a class="textlink" href="<?= esc(siteUrl($new ? '/login/' : '/register/')) ?>"><?= $new ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт' ?></a>
     </div>
 
+    <?php elseif ($type === 'account/profile'): ?>
+        <div class="section-line">
+            <h1>Учётная запись</h1>
+            <?= formStart('logout') ?><button class="textlink">Выйти</button></form>
+        </div>
+        <nav class="tabs" aria-label="Личный кабинет">
+            <a href="<?= esc(siteUrl('/account/profile/')) ?>" aria-current="page">Мои данные</a>
+            <a href="<?= esc(siteUrl('/account/orders/')) ?>">Мои заказы</a>
+            <?php if ($me['role'] === 'admin'): ?><a href="<?= esc(siteUrl('/admin/')) ?>">Управление магазином</a><?php endif; ?>
+        </nav>
+        <div class="account-grid">
+            <?= formStart('profile', 'editor form-stack') ?>
+                <h2>Личные данные</h2>
+                <label>Имя<input name="name" autocomplete="name" maxlength="100" value="<?= esc($me['name']) ?>" required></label>
+                <label>Электронная почта<input name="email" type="email" autocomplete="email" maxlength="190" value="<?= esc($me['email']) ?>" required></label>
+                <label>Текущий пароль<input name="current_password" type="password" autocomplete="current-password" required></label>
+                <button class="btn">Сохранить данные</button>
+            </form>
+            <?= formStart('password', 'editor form-stack') ?>
+                <h2>Изменить пароль</h2>
+                <label>Текущий пароль<input name="current_password" type="password" autocomplete="current-password" required></label>
+                <label>Новый пароль<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+                <label>Повторите новый пароль<input name="password_repeat" type="password" autocomplete="new-password" minlength="8" required></label>
+                <button class="btn">Изменить пароль</button>
+            </form>
+        </div>
     <?php else: ?>
+    <nav class="tabs" aria-label="Личный кабинет">
+        <a href="<?= esc(siteUrl('/account/profile/')) ?>">Мои данные</a>
+        <a href="<?= esc(siteUrl('/account/orders/')) ?>" aria-current="page">Мои заказы</a>
+    </nav>
     <div class="section-line">
         <h1>Мои заказы</h1>
         <?= formStart( 'logout' ) ?>

@@ -6,8 +6,8 @@
         <title><?= esc( $title ) ?></title>
         <meta name="description" content="<?= esc($desc) ?>">
         <link rel="icon" href="<?= esc(siteUrl('/assets/favicon.svg')) ?>">
-        <link rel="stylesheet" href="<?= esc( siteUrl('/assets/style.css') ) ?>">
-        <script defer src="<?= esc(siteUrl('/assets/app.js')) ?>"></script>
+        <link rel="stylesheet" href="<?= esc( siteUrl('/assets/style.css?v=20261123') ) ?>">
+        <script defer src="<?= esc(siteUrl('/assets/app.js?v=20261123')) ?>"></script>
 
         <?php if (!$private): ?>
         <link rel="canonical" href="<?= esc( $canonical ) ?>">
@@ -33,9 +33,11 @@
                 <a class="brand" href="<?= esc( siteUrl('/') ) ?>" aria-label="Слой, главная"><?= icon('logo') ?>СЛОЙ</a>
                 <nav class="mainnav" aria-label="Основное меню">
                     <a href="<?= esc(siteUrl('/catalog/')) ?>" <?= $type === 'catalog' ? 'aria-current="page"' : '' ?>>Каталог</a>
-                    <a href="<?= esc(siteUrl('/catalog/fanera/')) ?>">Фанера</a>
-                    <a href="<?= esc( siteUrl('/catalog/plitka/') ) ?>">Плитка</a>
-                    <a href="<?= esc(siteUrl('/catalog/klej/')) ?>">Клей</a>
+                    <?php foreach ($categories as $navCategory): ?>
+                        <a href="<?= esc(siteUrl('/catalog/' . $navCategory['slug'] . '/')) ?>"><?= esc($navCategory['name']) ?></a>
+                    <?php endforeach; ?>
+                    <a href="<?= esc(siteUrl('/about/')) ?>" <?= $type === 'about' ? 'aria-current="page"' : '' ?>>О компании</a>
+                    <a href="<?= esc(siteUrl('/contacts/')) ?>" <?= $type === 'contacts' ? 'aria-current="page"' : '' ?>>Контакты</a>
                 </nav>
                 <div class="tools">
                     <details class="search">
@@ -47,9 +49,9 @@
                             <button class="btn">Найти</button>
                         </form>
                     </details>
-                    <a class="tool" aria-label="Личный кабинет" href="<?= esc( siteUrl(!$me ? '/login/' : ($me['role'] === 'admin' ? '/admin/' : '/account/orders/')) ) ?>"><?= icon('user') ?></a>
+                    <a class="tool" aria-label="Личный кабинет" href="<?= esc( siteUrl(!$me ? '/login/' : ($me['role'] === 'admin' ? '/admin/' : '/account/profile/')) ) ?>"><?= icon('user') ?></a>
                     <a class="cartlink" href="<?= esc(siteUrl('/cart/')) ?>"><?= icon('bag') ?><span>Корзина</span>
-                        <b><?= array_sum( $_SESSION['cart'] ?? [] ) ?></b>
+                        <b data-cart-count><?= array_sum( $_SESSION['cart'] ?? [] ) ?></b>
                     </a>
                 </div>
             </div>
@@ -59,12 +61,16 @@
             <p role="alert" class="notice shell"><?= esc( $_SESSION['error'] ) ?></p>
             <?php unset($_SESSION['error']);endif; ?>
 
+            <?php if (!empty($_SESSION['success'])): ?>
+                <p role="status" class="notice shell success"><?= esc($_SESSION['success']) ?></p>
+                <?php unset($_SESSION['success']); ?>
+            <?php endif; ?>
             <?php if ($crumbs): ?>
             <nav class="crumbs shell" aria-label="Путь к странице">
                 <a href="<?= esc( siteUrl('/') ) ?>">Главная</a>
                 <?php foreach ($crumbs as $i => $c): ?>
                 <span>/</span>
-                <?php if ($i === array_key_last($crumbs)): ?>
+                <?php if ($i === count($crumbs) - 1): ?>
                 <?= esc($c[0]) ?>
                 <?php else: ?>
                 <a href="<?= esc(siteUrl($c[1])) ?>"><?= esc($c[0]) ?></a>
@@ -79,6 +85,10 @@
                 case 'product':
                     require ROOT . '/views/' . $type . '.php';
                     break;
+                case 'about':
+                case 'contacts':
+                    require ROOT . '/views/company.php';
+                    break;
                 case 'admin':
                     require ROOT . '/views/admin.php';
                     break;
@@ -90,6 +100,7 @@
                 case 'login':
                 case 'register':
                 case 'account/orders':
+                case 'account/profile':
                     require ROOT . '/views/account.php';
                     break;
                 default:
@@ -101,13 +112,26 @@
             </section>
             <?php } ?>
         </main>
+        <?php $company = company(); ?>
         <footer>
-            <div class="shell foot">
-                <a class="brand" href="<?= esc(siteUrl('/')) ?>"><?= icon( 'logo' ) ?>СЛОЙ</a>
-                <span>Магазин стройматериалов · учебный проект</span>
-                <a href="<?= esc( siteUrl('/catalog/') ) ?>">Каталог ↗</a>
-                <a href="<?= esc(siteUrl('/account/orders/')) ?>">Мои заказы ↗</a>
+            <div class="shell footer-grid">
+                <div>
+                    <a class="brand" href="<?= esc(siteUrl('/')) ?>"><?= icon('logo') ?>СЛОЙ</a>
+                    <p>Фанера, плитка и клей для ремонта и отделки. Подбор по характеристикам, заказ онлайн и самовывоз.</p>
+                </div>
+                <nav aria-label="Информация о магазине">
+                    <a href="<?= esc(siteUrl('/about/')) ?>">О компании</a>
+                    <a href="<?= esc(siteUrl('/contacts/')) ?>">Контакты</a>
+                    <a href="<?= esc(siteUrl('/catalog/')) ?>">Каталог</a>
+                    <a href="<?= esc(siteUrl('/account/profile/')) ?>">Личный кабинет</a>
+                </nav>
+                <div>
+                    <p><?= esc($company['address']) ?></p>
+                    <p><?= esc($company['hours']) ?></p>
+                    <p><?= esc($company['phone']) ?> · <?= esc($company['email']) ?></p>
+                </div>
             </div>
+            <p class="shell footer-note">© <?= date('Y') ?> Слой · Учебный магазин. Контактные данные вымышлены.</p>
         </footer>
     </body>
 </html>
