@@ -33,9 +33,6 @@
                 <a class="brand" href="<?= esc( siteUrl('/') ) ?>" aria-label="Слой, главная"><?= icon('logo') ?>СЛОЙ</a>
                 <nav class="mainnav" aria-label="Основное меню">
                     <a href="<?= esc(siteUrl('/catalog/')) ?>" <?= $type === 'catalog' ? 'aria-current="page"' : '' ?>>Каталог</a>
-                    <?php foreach ($categories as $navCategory): ?>
-                        <a href="<?= esc(siteUrl('/catalog/' . $navCategory['slug'] . '/')) ?>"><?= esc($navCategory['name']) ?></a>
-                    <?php endforeach; ?>
                     <a href="<?= esc(siteUrl('/about/')) ?>" <?= $type === 'about' ? 'aria-current="page"' : '' ?>>О компании</a>
                     <a href="<?= esc(siteUrl('/contacts/')) ?>" <?= $type === 'contacts' ? 'aria-current="page"' : '' ?>>Контакты</a>
                 </nav>

@@ -227,9 +227,16 @@ function handleAction(): void
                     }
                 }
                 go($back);
+            case 'delete_series':
+                requireAdmin();
+                $back = assortmentReturn();
+                $id = positive($_POST['id'] ?? 0, PHP_INT_MAX);
+                deleteSeries($id);
+                $_SESSION['success'] = 'Товарная серия и все её варианты удалены. История заказов сохранена.';
+                go(assortmentReturn($id));
             case 'series':
                 requireAdmin();
-                $back = '/admin/?tab=products';
+                $back = assortmentReturn();
                 $id = (int) ($_POST['id'] ?? 0);
                 $category = positive($_POST['category_id'] ?? 0, PHP_INT_MAX);
                 if (!one('SELECT id FROM categories WHERE id=?', [$category])) {
@@ -245,7 +252,7 @@ function handleAction(): void
                 go($back);
             case 'variant':
                 requireAdmin();
-                $back = '/admin/?tab=products';
+                $back = assortmentReturn();
                 $id = (int) ($_POST['id'] ?? 0);
                 $price = str_replace(',', '.', (string) ($_POST['price'] ?? ''));
                 $stock = filter_var($_POST['stock'] ?? '', FILTER_VALIDATE_INT);

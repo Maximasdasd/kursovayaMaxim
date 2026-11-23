@@ -162,6 +162,150 @@ function deleteCategory(int $id, int $target): void
     }
 }
 
+function assortmentListing(): array
+{
+    $query = ['tab' => 'products'];
+    foreach (['q', 'category_id', 'series_id', 'availability', 'visibility'] as $key) {
+        $query[$key] = is_string($_GET[$key] ?? null) ? mb_substr(trim($_GET[$key]), 0, 100) : '';
+    }
+    $conditions = [];
+    $args = [];
+    if ($query['q'] !== '') {
+        $parts = [];
+        foreach (['p.name', 'v.sku', 'v.option_name'] as $column) {
+            $parts[] = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+                ? 'fold_text(' . $column . ') LIKE fold_text(?)' : $column . ' LIKE ?';
+            $args[] = '%' . $query['q'] . '%';
+        }
+        $conditions[] = '(' . implode(' OR ', $parts) . ')';
+    }
+    foreach (['category_id' => 'p.category_id', 'series_id' => 'p.id'] as $key => $column) {
+        $id = filter_var($query[$key], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $query[$key] = $id ? (string) $id : '';
+        if ($id) {
+            $conditions[] = $column . '=?';
+            $args[] = $id;
+        }
+    }
+    if (in_array($query['availability'], ['in', 'out'], true)) {
+        $conditions[] = $query['availability'] === 'in' ? 'v.stock>0' : 'v.stock=0';
+    } else {
+        $query['availability'] = '';
+    }
+    if (in_array($query['visibility'], ['0', '1'], true)) {
+        $conditions[] = 'v.visible=?';
+        $args[] = (int) $query['visibility'];
+    } else {
+        $query['visibility'] = '';
+    }
+    $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
+    $seriesFrom = ' FROM products p LEFT JOIN variants v ON v.product_id=p.id';
+    $count = (int) run('SELECT COUNT(*)' . VARIANT_TABLES . $where, $args)->fetchColumn();
+    $seriesCount = (int) run('SELECT COUNT(DISTINCT p.id)' . $seriesFrom . $where, $args)->fetchColumn();
+    $pages = max(1, (int) ceil($count / 10));
+    $seriesPages = max(1, (int) ceil($seriesCount / 10));
+    $page = min($pages, max(1, (int) (filter_var($_GET['page'] ?? 1, FILTER_VALIDATE_INT) ?: 1)));
+    $seriesPage = min($seriesPages, max(1, (int) (filter_var($_GET['series_page'] ?? 1, FILTER_VALIDATE_INT) ?: 1)));
+    return [
+        'items' => rows(selectVariants() . $where . ' ORDER BY p.id,v.id LIMIT 10 OFFSET ' . (($page - 1) * 10), $args),
+        'series' => rows('SELECT DISTINCT p.*' . $seriesFrom . $where . ' ORDER BY p.id LIMIT 10 OFFSET ' . (($seriesPage - 1) * 10), $args),
+        'count' => $count, 'pages' => $pages, 'page' => $page,
+        'series_count' => $seriesCount, 'series_pages' => $seriesPages, 'series_page' => $seriesPage,
+        'query' => $query
+    ];
+}
+
+function assortmentFields(array $listing): string
+{
+    $fields = '';
+    foreach (array_merge($listing['query'], ['page' => $listing['page'], 'series_page' => $listing['series_page']]) as $key => $value) {
+        $fields .= '<input type="hidden" name="return_' . esc($key) . '" value="' . esc($value) . '">';
+    }
+    return $fields;
+}
+
+function assortmentReturn(int $deleted = 0): string
+{
+    $query = ['tab' => 'products'];
+    foreach (['q', 'category_id', 'series_id', 'availability', 'visibility', 'page', 'series_page'] as $key) {
+        if (is_string($_POST['return_' . $key] ?? null)) {
+            $query[$key] = mb_substr($_POST['return_' . $key], 0, 100);
+        }
+    }
+    if ($deleted && (int) ($query['series_id'] ?? 0) === $deleted) {
+        unset($query['series_id']);
+    }
+    return '/admin/?' . http_build_query($query);
+}
+
+function assortmentPages(array $listing, bool $series = false): string
+{
+    $key = $series ? 'series_page' : 'page';
+    $page = $listing[$key];
+    $pages = $listing[$series ? 'series_pages' : 'pages'];
+    if ($pages < 2) return '';
+    $query = array_merge($listing['query'], ['page' => $listing['page'], 'series_page' => $listing['series_page']]);
+    $links = [];
+    if ($page > 1) $links[$page - 1] = 'Назад';
+    for ($i = max(1, $page - 2); $i <= min($pages, $page + 2); $i++) $links[$i] = (string) $i;
+    if ($page < $pages && !isset($links[$page + 1])) $links[$page + 1] = 'Далее';
+    $html = '<nav class="pagination" aria-label="' . ($series ? 'Страницы серий' : 'Страницы ассортимента') . '">';
+    foreach ($links as $number => $label) {
+        $query[$key] = $number;
+        $html .= '<a href="' . esc(pageLink('/admin/', $query) . ($series ? '#series' : '#variants')) . '"' . ($number === $page ? ' aria-current="page"' : '') . '>' . $label . '</a>';
+    }
+    return $html . '</nav>';
+}
+
+function deleteSeries(int $id): void
+{
+    if (!one('SELECT id FROM products WHERE id=?', [$id])) {
+        throw new DomainException('Серия уже удалена. Обновите список.');
+    }
+    $sqlite = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    if (!$sqlite) {
+        $column = one("SHOW COLUMNS FROM order_items LIKE 'variant_id'");
+        if ($column['Null'] === 'NO') {
+            try {
+                db()->exec('ALTER TABLE order_items MODIFY variant_id INT NULL');
+            } catch (PDOException $e) {
+                throw new DomainException('Не удалось подготовить историю заказов. Для удаления серий требуется право ALTER на таблицу order_items.');
+            }
+        }
+    }
+    db()->beginTransaction();
+    try {
+        if ($sqlite) {
+            db()->exec('UPDATE products SET name=name WHERE 0');
+            foreach (rows('PRAGMA table_info(order_items)') as $column) {
+                if ($column['name'] === 'variant_id' && $column['notnull']) {
+                    db()->exec('CREATE TABLE order_items_updated (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INT NOT NULL, variant_id INT NULL,
+                        sku VARCHAR(48) NOT NULL, name VARCHAR(240) NOT NULL, unit VARCHAR(32) NOT NULL,
+                        price INT UNSIGNED NOT NULL, quantity INT UNSIGNED NOT NULL,
+                        FOREIGN KEY(order_id) REFERENCES orders(id), FOREIGN KEY(variant_id) REFERENCES variants(id)
+                    )');
+                    db()->exec('INSERT INTO order_items_updated(id,order_id,variant_id,sku,name,unit,price,quantity)
+                        SELECT id,order_id,variant_id,sku,name,unit,price,quantity FROM order_items');
+                    db()->exec('DROP TABLE order_items');
+                    db()->exec('ALTER TABLE order_items_updated RENAME TO order_items');
+                }
+            }
+        }
+        $series = one('SELECT id FROM products WHERE id=?' . ($sqlite ? '' : ' FOR UPDATE'), [$id]);
+        if (!$series) throw new DomainException('Серия уже удалена. Обновите список.');
+        $variants = rows('SELECT id FROM variants WHERE product_id=? ORDER BY id' . ($sqlite ? '' : ' FOR UPDATE'), [$id]);
+        run('UPDATE order_items SET variant_id=NULL WHERE variant_id IN (SELECT id FROM variants WHERE product_id=?)', [$id]);
+        run('DELETE FROM variants WHERE product_id=?', [$id]);
+        run('DELETE FROM products WHERE id=?', [$id]);
+        db()->commit();
+        foreach ($variants as $variant) unset($_SESSION['cart'][$variant['id']]);
+    } catch (Throwable $e) {
+        if (db()->inTransaction()) db()->rollBack();
+        throw $e;
+    }
+}
+
 function orderListing(): array
 {
     $search = $_GET['q'] ?? $_GET['number'] ?? '';

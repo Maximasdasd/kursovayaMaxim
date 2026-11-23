@@ -127,6 +127,7 @@ function cartLines(): array
     }
     $in = implode(',', array_fill(0, count($ids), '?'));
     $lines = rows(selectVariants() . " WHERE v.id IN ($in) ORDER BY v.id", $ids);
+    $_SESSION['cart'] = array_intersect_key($_SESSION['cart'], array_fill_keys(array_column($lines, 'id'), true));
     foreach ($lines as &$line) {
         $line['qty'] = $_SESSION['cart'][$line['id']];
     }

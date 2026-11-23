@@ -14,6 +14,7 @@ if ($path !== '/' && substr($path, -1) !== '/' && preg_match('~^/[a-z0-9/-]+$~D'
     exit();
 }
 $me = user();
+if (!empty($_SESSION['cart'])) cartLines();
 $categories = rows('SELECT * FROM categories ORDER BY id');
 $type = 'missing';
 $title = 'Страница не найдена';

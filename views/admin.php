@@ -58,7 +58,9 @@
     <?php
         elseif ($tab === 'products'):
         
-        $vs = rows(selectVariants() . ' ORDER BY p.id,v.id');
+        $listing = assortmentListing();
+        $query = $listing['query'];
+        $vs = $listing['items'];
         $products = rows('SELECT * FROM products ORDER BY id');
         $vs[] = array_fill_keys(
             [
@@ -79,10 +81,51 @@
             null
         );
     ?>
-    <details class="editor">
-        <summary>Товарные серии</summary>
-        <?php foreach ( array_merge($products, [['id' => 0, 'name' => '', 'description' => '', 'category_id' => 0]]) as $series ): ?>
+    <form class="orders-filters" action="<?= esc(siteUrl('/admin/')) ?>" method="get">
+        <input type="hidden" name="tab" value="products">
+        <label>Название, вариант или артикул
+            <input type="search" name="q" value="<?= esc($query['q']) ?>" placeholder="Например, фанера или FK-12">
+        </label>
+        <label>Категория
+            <select name="category_id">
+                <option value="">Все категории</option>
+                <?php foreach ($categories as $cat): ?>
+                    <option value="<?= (int) $cat['id'] ?>" <?= (string) $cat['id'] === $query['category_id'] ? 'selected' : '' ?>><?= esc($cat['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label>Серия
+            <select name="series_id">
+                <option value="">Все серии</option>
+                <?php foreach ($products as $product): ?>
+                    <option value="<?= (int) $product['id'] ?>" <?= (string) $product['id'] === $query['series_id'] ? 'selected' : '' ?>><?= esc($product['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label>Наличие
+            <select name="availability">
+                <option value="">Любой остаток</option>
+                <option value="in" <?= $query['availability'] === 'in' ? 'selected' : '' ?>>В наличии</option>
+                <option value="out" <?= $query['availability'] === 'out' ? 'selected' : '' ?>>Нет в наличии</option>
+            </select>
+        </label>
+        <label>Видимость
+            <select name="visibility">
+                <option value="">Все варианты</option>
+                <option value="1" <?= $query['visibility'] === '1' ? 'selected' : '' ?>>На витрине</option>
+                <option value="0" <?= $query['visibility'] === '0' ? 'selected' : '' ?>>Скрытые</option>
+            </select>
+        </label>
+        <div><button class="btn">Применить</button> <a class="textlink" href="<?= esc(siteUrl('/admin/?tab=products')) ?>">Сбросить</a></div>
+    </form>
+    <details class="editor" id="series" <?= isset($_GET['series_page']) ? 'open' : '' ?>>
+        <summary>Товарные серии · Найдено: <?= $listing['series_count'] ?></summary>
+        <p>Страница <?= $listing['series_page'] ?> из <?= $listing['series_pages'] ?>. Удаление серии удаляет все её варианты. Оформленные заказы сохраняются.</p>
+        <?php if (!$listing['series']): ?><p>По заданным условиям серии не найдены.</p><?php endif; ?>
+        <?php foreach (array_merge($listing['series'], [['id' => 0, 'name' => '', 'description' => '', 'category_id' => 0]]) as $series): ?>
+        <?php if (!$series['id']): ?><h2>Новая товарная серия</h2><?php endif; ?>
         <?= formStart('series', 'edit-fields') ?>
+            <?= assortmentFields($listing) ?>
             <input type="hidden" name="id" value="<?= $series[ 'id' ] ?>">
             <label>Название серии
                 <input name="name" required value="<?= esc( $series['name'] ) ?>">
@@ -98,12 +141,23 @@
             </label>
             <button class="btn"><?= $series['id'] ? 'Сохранить серию' : 'Добавить серию' ?></button>
         </form>
+        <?php if ($series['id']): ?>
+            <?= formStart('delete_series', 'category-delete') ?>
+                <?= assortmentFields($listing) ?>
+                <input type="hidden" name="id" value="<?= (int) $series['id'] ?>">
+                <button class="textlink danger" data-confirm="<?= esc('Удалить серию «' . $series['name'] . '» и все её варианты? Это действие нельзя отменить. История заказов сохранится.') ?>">Удалить серию полностью</button>
+            </form>
+        <?php endif; ?>
         <?php endforeach; ?>
+        <?= assortmentPages($listing, true) ?>
     </details>
+    <p class="resultcount" id="variants">Найдено вариантов: <?= $listing['count'] ?> · Страница <?= $listing['page'] ?> из <?= $listing['pages'] ?></p>
+    <?php if (!$listing['items']): ?><div class="empty"><h2>Варианты не найдены</h2><p>Измените фильтры или добавьте новый вариант.</p></div><?php endif; ?>
     <?php foreach ( $vs as $v ): ?>
     <details class="editor">
         <summary><?= esc( $v['id'] ? $v['name'] . ' · ' . $v['option_name'] . ' · ' . $v['sku'] : 'Добавить вариант' ) ?><?= $v['id'] && !$v['visible'] ? '(скрыт)' : '' ?></summary>
         <?= formStart('variant', 'edit-fields', true) ?>
+            <?= assortmentFields($listing) ?>
             <input type="hidden" name="id" value="<?= (int) $v[ 'id' ] ?>">
             <label>Серия<select name="product_id">
                     <?php foreach ($products as $p): ?>
@@ -151,6 +205,7 @@
         </form>
     </details>
     <?php endforeach; ?>
+    <?= assortmentPages($listing) ?>
     <?php else: ?>
         <?php $listing = orderListing(); $query = $listing['query']; ?>
         <form class="orders-filters" action="<?= esc(siteUrl('/admin/')) ?>" method="get">
